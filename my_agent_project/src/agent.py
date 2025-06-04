@@ -1,4 +1,4 @@
-import google.generativeai as genai # Using the placeholder library
+import google.generativeai as genai
 
 def run_agent() -> str:
     """
