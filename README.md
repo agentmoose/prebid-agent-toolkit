@@ -1,4 +1,4 @@
-# My Agent Project
+# Prebid Agent Toolkit
 
 This project is a sample agent created with Python, using `uv` for package management and `mypy` for type checking.
 
