@@ -1,6 +1,27 @@
 # Prebid Agent Toolkit
 
-This project is a sample agent created with Python. It can be run locally or using Docker, with Docker being the primary method for interacting with the GitHub MCP Server.
+This project is a sample agent created with Python. It can be run locally or using Docker, with Docker being the primary method for interacting with the GitHub MCP Server. It also includes a feature to review GitHub Pull Requests using AI.
+
+## Configuration
+
+Before running the agent, especially for the Pull Request Reviewer functionality or MCP server interaction, you need to configure the following environment variables:
+
+*   **`GITHUB_PERSONAL_ACCESS_TOKEN`**:
+    *   **Purpose**: Required for interacting with the GitHub API. This token is used to fetch pull request details, post comments on pull requests, and for the MCP server to interact with GitHub on your behalf.
+    *   **Permissions**: Ensure the token has the necessary scopes. For public repositories, `public_repo` might be sufficient for PR reviews. For private repositories, `repo` scope is typically needed. For MCP server interactions (like the `get_me` tool), `read:user` might be required. The token should have at least read access to PR content and write access for posting comments if using the review feature.
+    *   **Creation**: You can [create one here](https://github.com/settings/personal-access-tokens/new).
+
+*   **`GEMINI_API_KEY`**:
+    *   **Purpose**: Required for accessing Google's Gemini API to generate AI-powered code reviews for the Pull Request Reviewer feature.
+    *   **Acquisition**: You'll need to obtain an API key from Google AI Studio or your Google Cloud project.
+
+**Example (bash):**
+```bash
+export GITHUB_PERSONAL_ACCESS_TOKEN="your_github_pat_here"
+export GEMINI_API_KEY="your_gemini_api_key_here"
+```
+
+**Note on Docker:** If you are running the agent within a Docker container, these environment variables need to be passed into the Docker container (e.g., using the `-e` flag with `docker run`).
 
 ## Setup (For Local Development & Type Checking)
 
@@ -41,17 +62,8 @@ This agent can leverage the GitHub MCP Server to interact with GitHub APIs. This
 
 ### Prerequisites
 
-*   **Docker**: Ensure Docker is installed and the Docker daemon is running.
-*   **GitHub Personal Access Token (PAT)**: You'll need a GitHub PAT. You can [create one here](https://github.com/settings/personal-access-tokens/new). The token will need permissions relevant to the tools you intend to use via the MCP server (e.g., `read:user` for the `get_me` tool).
-
-### Environment Variable
-
-The agent requires your GitHub PAT to be set as an environment variable for the Docker container that runs the agent:
-
-```bash
-export GITHUB_PERSONAL_ACCESS_TOKEN="your_github_pat_here"
-```
-Make sure this variable is exported in the shell session from which you run the `docker run` command.
+*   **Docker**: Ensure Docker is installed and the Docker daemon is running (if using Docker-based workflows).
+*   **Environment Variables**: Ensure `GITHUB_PERSONAL_ACCESS_TOKEN` (and `GEMINI_API_KEY` if using the PR reviewer) are set as described in the "Configuration" section.
 
 ### Build the Agent Docker Image
 
@@ -69,32 +81,57 @@ To run the agent and have it interact with the MCP server, execute the following
 docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -e GITHUB_PERSONAL_ACCESS_TOKEN=$GITHUB_PERSONAL_ACCESS_TOKEN \
+    # -e GEMINI_API_KEY=$GEMINI_API_KEY # Uncomment if using PR reviewer via this Docker setup
     prebid-agent-mcp
 ```
 
 **Explanation of the command:**
 *   `--rm`: Automatically removes the container when it exits.
 *   `-v /var/run/docker.sock:/var/run/docker.sock`: This mounts the Docker socket from your host into the container. It's **required** because the agent script itself executes `docker run` to start the `ghcr.io/github/github-mcp-server` Docker image.
-*   `-e GITHUB_PERSONAL_ACCESS_TOKEN=$GITHUB_PERSONAL_ACCESS_TOKEN`: This passes your GitHub PAT into the agent's container. The agent script then uses this token to authenticate when it, in turn, starts the MCP server container.
+*   The `-e` flags pass the necessary API keys into the agent's container. The agent script then uses these tokens.
 *   `prebid-agent-mcp`: The name of the image you built.
 
-The agent will then start, invoke the GitHub MCP server (by running its Docker image), call the `get_me` tool via the MCP server, and print a greeting with your GitHub login and name.
+The agent will then start. If run without arguments, it invokes the GitHub MCP server (by running its Docker image), calls the `get_me` tool via the MCP server, and prints a greeting. If run with `--pr-url`, it will perform the PR review.
 
 ## Running the Agent Locally (Python directly)
 
 You can also run the agent directly using Python if you have set up your environment as described in the "Setup" section.
 
+**For MCP Server Interaction (Default Behavior):**
 ```bash
 python src/agent.py
 ```
-
-**Note**: When run this way, the `src/agent.py` script will attempt to use `docker` commands to launch the MCP server (`ghcr.io/github/github-mcp-server`). This means:
+**Note**: When run this way for MCP interaction, the `src/agent.py` script will attempt to use `docker` commands to launch the MCP server (`ghcr.io/github/github-mcp-server`). This means:
 1.  Docker must be installed and the Docker daemon running.
-2.  The `GITHUB_PERSONAL_ACCESS_TOKEN` environment variable must be set in your current shell session:
-    ```bash
-    export GITHUB_PERSONAL_ACCESS_TOKEN="your_github_pat_here"
-    ```
-If Docker is not available or the MCP server container cannot be launched, the agent will fail. The Dockerized setup described in the previous section is the primary and more robust method for running the agent with MCP integration, as it ensures the agent's execution environment is correctly configured.
+2.  The `GITHUB_PERSONAL_ACCESS_TOKEN` environment variable must be set in your current shell session (see "Configuration").
+If Docker is not available or the MCP server container cannot be launched, this mode will fail.
+
+**For Pull Request Reviewer:**
+```bash
+python src/agent.py --pr-url "https://github.com/owner/repo/pull/PULL_NUMBER"
+```
+Ensure `GITHUB_PERSONAL_ACCESS_TOKEN` and `GEMINI_API_KEY` are set in your environment as per the "Configuration" section.
+
+The Dockerized setup is the primary method for running the agent with MCP integration. The local Python execution is suitable for development, testing, and running the PR reviewer.
+
+## Pull Request Reviewer
+
+This agent includes a feature to automatically review GitHub Pull Requests using AI.
+
+### Functionality
+When provided with a GitHub Pull Request URL, the agent will:
+1. Fetch the PR details (title, body, and diff) from the GitHub API.
+2. Generate a code review using Google's Gemini model.
+3. Post the generated review as a comment back to the original Pull Request on GitHub.
+
+### How to Use
+To trigger the PR review functionality, run the agent with the `--pr-url` command-line argument:
+
+```bash
+python src/agent.py --pr-url "https://github.com/owner/repo/pull/PULL_NUMBER"
+```
+
+This command should be run from an environment where the necessary environment variables are set (see "Configuration" section).
 
 ## Type Checking
 
